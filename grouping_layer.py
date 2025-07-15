@@ -55,7 +55,7 @@ class GroupingLayer(nn.Module):
     def forward(self, x_in, temp=1.0):
         # x_in B, f_in, H, W
         B, _, H, W = x_in.shape
-        W = self.kernel_size * self.kernel_size
+        WIN = self.kernel_size * self.kernel_size
         x_out = self.ln_conv(self.conv(x_in))
         x_out = x_out
         x_in  = x_in
@@ -67,7 +67,7 @@ class GroupingLayer(nn.Module):
         fold_args = {'kernel_size': self.kernel_size, 'stride': self.kernel_size}
 
         k_wins = F.unfold(k, **fold_args) 
-        k_wins = k_wins.view(B, self.f_out, W, T_out)
+        k_wins = k_wins.view(B, self.f_out, WIN, T_out)
         log_t('k', k)
         log_t('v', v)
         log_t('k_wins', k_wins)
@@ -80,9 +80,12 @@ class GroupingLayer(nn.Module):
             att = F.fold(att, x_in.shape[-2:], **fold_args)
             log_t('att', att)   
             update = v * att.expand(-1, self.f_out, -1, -1)
-            update = F.unfold(update, **fold_args).view(B, self.f_out, W, T_out).sum(dim=2).view(x_out.shape)
+            update = F.unfold(update, **fold_args).view(B, self.f_out, WIN, T_out).sum(dim=2).view(x_out.shape)
             x_out += self.ln_v(update)
             x_out += self.ln_mlp(self.mlp(x_out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2))
+
+        ups = F.unfold(att, **fold_args).reshape(B, WIN, *x_out.shape[-2:])
+        log_t('ups', ups)
 
         return x_out
 
